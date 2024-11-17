@@ -1,11 +1,14 @@
 """
+SUBPROBLEMS:
 ------------
 Wanting to prove:
     s3[0:i+j-1] is an interleaving of s1[0:i-1] and s1[0:j-1]
 
-BackTracking
-    - needs recursive implementation, where done criteria is if there are
-        surrounding ones in the matrix when creating a path
+BackTracking:
+    - needs recursive implementation, where done criteria is if
+    you are at the upper-left corner of the table (or end of table)
+    - needs to be able to make decisions on whether to add from string1
+    or string 2, based on the neighboring elements within the decision matrix
 """
 from __future__ import annotations
 
@@ -14,6 +17,7 @@ import enum
 from typing import List, TypeAlias, Any, Deque
 from pathlib import Path
 from collections import deque
+import argparse
 
 IntMatrix: TypeAlias = List[List[int]]
 CharArray: TypeAlias = Deque[str]
@@ -50,9 +54,9 @@ class InputData:
         with open(filename, 'r', encoding = 'utf-8') as file:
             data = file.readlines()
             assert len(data) == InputFileSchema.LENGTH
-            string1: str = data[InputFileSchema.STRING1]
-            string2: str = data[InputFileSchema.STRING2]
-            string3: str = data[InputFileSchema.STRING3]
+            string1: str = data[InputFileSchema.STRING1].strip()
+            string2: str = data[InputFileSchema.STRING2].strip()
+            string3: str = data[InputFileSchema.STRING3].strip()
             return cls(string1, string2, string3)
 
 @dataclass
@@ -68,9 +72,15 @@ class InterleaveResultsFile:
     s2_substrings: List[str] = field(default_factory = list)
 
     def to_ascii_file(self, filename: Path):
+        """
+        writes all results to prescribed output file schema.
+
+        Args:
+            filename (Path): output filename
+        """        
         with open(filename, 'w', encoding = 'utf-8') as output_file:
-            s1_substrings_str: str = ','.join(self.s1_substrings)
-            s2_substrings_str: str = ','.join(self.s2_substrings)
+            s1_substrings_str: str = ', '.join(self.s1_substrings)
+            s2_substrings_str: str = ', '.join(self.s2_substrings)
             output_str = f"""Interleaving exists: {self.results.interleave_exists}, Count of interleavings: {self.interleave_count}
 s1 substrings: {s1_substrings_str}
 s2 substrings: {s2_substrings_str}
@@ -78,7 +88,26 @@ s2 substrings: {s2_substrings_str}
             output_file.write(output_str)
 
 def is_string_interleaved(string1: str, string2: str, string3: str) -> IntMatrix:
+    """
+    checks whether two strings can be interleaved to form the third string.
+    This is done using a dynamic programming approach, where I build up
+    a decision path table using a bottom-up approach. blank results will
+    be returned if the sum of the lengths of the two strings do not equal
+    the length of the third string.
+
+    Args:
+        string1 (str): input string 1 - characters compose columns of table.
+        string2 (str): input string 2 - characters compose rows of table.
+        string3 (str): interleaved string to be checked against strings 1 and 2.
+
+    Returns:
+        IntMatrix: NxN matrix of decision values that will be one or zero.
+            can be used to reconstruct the substrings of string 1 and 2 to
+            form the interleaved string3
+    """    
+
     if len(string1) + len(string2) != len(string3):
+        # immediately return blank results if this precondition fails
         return InterleaveResults(interleave_exists = False)
 
     n_columns: int = len(string1) # COLUMNS
@@ -86,22 +115,25 @@ def is_string_interleaved(string1: str, string2: str, string3: str) -> IntMatrix
     interleave_matrix: IntMatrix = [[False] * (n_columns + 1) for _ in range(m_rows + 1)]
     interleave_matrix[m_rows][n_columns] = True
 
-    # using a bottom-up approach, we will start at the bottom corner of the table and work our way back.
+    # using a bottom-up approach, we will start at the bottom-right corner
+    # of the table and work our way back to entry (0, 0).
     for i in range(m_rows, -1, -1):
         for j in range(n_columns, -1, -1):
             if i < m_rows and string2[i] == string3[i + j] and interleave_matrix[i + 1][j]:
                 interleave_matrix[i][j] = True
             elif j < n_columns and string1[j] == string3[i + j] and interleave_matrix[i][j + 1]:
                 interleave_matrix[i][j] = True
-
-    #results.interleave_exists = interleave_matrix[0][0]
-    # we are interested in enumerating all the different substring combinations.
-    # therefore, we will traverse the table and make use of backtracking.
+    
+    # if the entry: (0,0) is True, we know that string3 is an interleaving of strings 1 and 2.
     return InterleaveResults(
         interleave_exists = interleave_matrix[0][0], matrix = interleave_matrix)
 
 @dataclass
 class InterleaveSet:
+    """
+    Used to bundle together substrings when creating the list of results in
+    the back tracking algorithm to follow.
+    """
     string1_parts: List[str] = field(default_factory = list)
     string2_parts: List[str] = field(default_factory = list)
     
@@ -212,6 +244,15 @@ def print_matrix(matrix: List[List[Any]]):
         print("  ", "-" * ((3 + col_widths[j]) * (len(row) - 1) - 1))
 
 def print_dp_matrix(matrix: IntMatrix, string1: str, string2: str):
+    """
+    Prints the dynamic programming approach matrix for the interleaving problem.
+    This is incredibly useful for debugging, and displaying results.
+
+    Args:
+        matrix (IntMatrix): solution from interleaving problem
+        string1 (str): characters form the column headers
+        string2 (str): characters form the row labels
+    """
     assert len(string1) == len(matrix) - 1 and len(string2) == len(matrix[0]) - 1
 
     columns = ["",]
@@ -227,18 +268,37 @@ def print_dp_matrix(matrix: IntMatrix, string1: str, string2: str):
     print_matrix(full_matrix)
     print("\n")
 
-def test_print_matrix():
-    string1 = "XXY"
-    string2 = "XXZ"
-    results = [
-        [1, 0, 0, 0],
-        [1, 0, 0, 0],
-        [1, 0, 0, 0],
-        [1, 1, 1, 1]
-    ]
-    print_dp_matrix(results, string1, string2)
-
 def test_is_string_interleaved():
+    """
+    TEST CASES:
+
+    CASE 1
+    ------
+    1 aab
+    2 axy
+    3.1 aaxaby --> True
+    3.2 abaaxy --> False
+
+    CASE 2
+    ------
+    1 aabcc
+    2 dbbca
+    3.1 aadbbcbcac --> True
+    3.2 aadbbbaccc --> False
+
+    CASE 3
+    ------
+    1. XXY
+    2. XXZ
+    3. XXZXXY --> True
+
+    CASE 4
+    ------
+    1. ABC
+    2. DEF
+    3. ADBECF --> True
+    """
+
     # case 1.1
     string1 = "aab"
     string2 = "axy"
@@ -254,7 +314,8 @@ def test_is_string_interleaved():
     print("Interleaved String: ", string3, "\n")
     print_dp_matrix(results_1_2.matrix, string1, string2)
     assert not results_1_2.interleave_exists
-
+    
+    # NOTE: case 2 originates from the homework problem
     # case 2.1
     string1 = "aabcc"
     string2 = "dbbca" 
@@ -264,6 +325,13 @@ def test_is_string_interleaved():
     print_dp_matrix(results_2_1.matrix, string1, string2)
     assert results_2_1.interleave_exists
 
+    # case 2.2
+    string3 = "aadbbbaccc"
+    results_2_2: InterleaveResults = is_string_interleaved(string1, string2, string3)
+    print("Interleaved String: ", string3, "\n")
+    print_dp_matrix(results_2_2.matrix, string1, string2)
+    assert not results_2_2.interleave_exists
+
     # case 3
     string1 = "XXY"
     string2 = "XXZ"
@@ -272,6 +340,15 @@ def test_is_string_interleaved():
     print("Interleaved String: ", string3, "\n")
     print_dp_matrix(results_3.matrix, string1, string2)
     assert results_3.interleave_exists
+
+    # case 4
+    string1 = "ABC"
+    string2 = "DEF"
+    string3 = "ADBECF"
+    results_4: InterleaveResults = is_string_interleaved(string1, string2, string3)
+    print("Interleaved String: ", string3, "\n")
+    print_dp_matrix(results_4.matrix, string1, string2)
+    assert results_4.interleave_exists
 
 def test_back_tracker():
     string1 = "aabcc"
@@ -292,27 +369,42 @@ String 1 Substrings: {subset.string1_parts}
 String 2 Substrings: {subset.string2_parts}
 -------------------------
         """)
-    
-if __name__ == "__main__":
-    #test_print_matrix()
-    #test_is_string_interleaved()
+
+def test_all():
+    test_is_string_interleaved()
     test_back_tracker()
 
+def main():
+    script_dir = Path(__file__).parent.resolve()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("input_strings_filename",
+                        default=script_dir.joinpath("Input.txt"), type = Path,
+                        help = "ASCII Input file of interleave string inputs.")
+    args = parser.parse_args()
+    input_filename: Path = args.input_strings_filename
+    test_dir = input_filename.parent.resolve()
+    output_basename = input_filename.name.replace("Input", "Output")
+    output_filename = test_dir.joinpath(output_basename)
 
-"""
-TEST CASES:
+    inputs = InputData.from_input_file(input_filename)
+    interleave_matrix_results: InterleaveResults = is_string_interleaved(
+        inputs.string1, inputs.string2, inputs.string3
+    )
+    print("Interleaved String: ", inputs.string3, "\n")
+    substring_sets = []
+    if len(inputs.string1) + len(inputs.string2) == len(inputs.string3):
+        print_dp_matrix(interleave_matrix_results.matrix, inputs.string1, inputs.string2)
 
-CASE 1
-------
-1 aab
-2 axy
-3.1 aaxaby --> True
-3.2 abaaxy --> False
+        substring_sets = find_substring_sets(
+            interleave_matrix_results.matrix, inputs.string1, inputs.string2)
+    
+    output = InterleaveResultsFile(
+        results = interleave_matrix_results,
+        interleave_count = len(substring_sets),
+        s1_substrings = substring_sets[0].string1_parts if substring_sets else [],
+        s2_substrings = substring_sets[0].string2_parts if substring_sets else []
+    )
+    output.to_ascii_file(output_filename)
 
-CASE 2
-------
-1 aabcc
-2 dbbca
-3.1 aadbbcbcac --> True
-3.2 aadbbbaccc --> False
-"""
+if __name__ == "__main__":
+    main()
