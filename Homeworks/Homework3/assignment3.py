@@ -9,8 +9,149 @@ BackTracking:
     you are at the upper-left corner of the table (or end of table)
     - needs to be able to make decisions on whether to add from string1
     or string 2, based on the neighboring elements within the decision matrix
+
+PSEUDOCODE:
+-----------
+
+dynamic problem, checking for interleaving: is_string_interleaved():
+
+let m = length(string2), n = length(string1)
+
+assert that m + n == length(string3)
+
+# initialize a table, and default every value to False or 0:
+matrix[m + 1][n + 1]
+for i = 0:1:m
+    for j = 0:1:n
+        matrix[i][j] = False
+matrix[m][n] = True
+
+# iterate through the table and populate each cell wrt neighboring entries
+# start at the bottom-right corner of the table, and work using a bottom-up approach
+for i = m:-1:0
+    for j = n:-1:0
+        # check if substring can be taken from string2
+        if i < m and string2[i+1] == string3[i + j]
+            matrix[i][j] = True
+        # check if substring can be taken from string1
+        if j < n and string1[j+1] == string3[i + j]
+            matrix[i][j] = True
+
+is_interleaved = matrix[m][n]
+return matrix
+
+
+backtracking algorithm: find_substring_sets
+general rules:
+    - start from the bottom-left corner
+    - if you move up in the matrix, you are adding a letter from the rows: STRING2
+    - if you move left in the matrix, you are adding a letter from the columns: STRING1
+    - if you go from left->up or up->left, alternate strings
+    - if you go from left->left or up->up, add character froms string 1 or 2 respectively
+
+pseudocode:
+
+inputs: dp_matrix, string1, string2
+
+results = empty list
+
+# solution buffers that will get popped
+string1_substrings = empty deque
+string2_substrings = empty deque
+
+direction_stack = empty stack
+
+# implement recursive back tracker
+function backtrack(i, j):
+
+    if i == 0 and j == 0:
+        # termination criteria, implies we are at the beginning of the table.
+        # if this is not reached, we do not append a final result,
+        # because it implies a bad/incomplete path.
+        results.append(bundle string1_substrings + string2_substrings)
+        return
+    
+    # traverse left
+    if j > 0 and dp_matrix[i][j-1]
+        if direction_stack[-1] != LEFT:
+            alternate string in buffers
+
+        string1_substrings[0].appendleft(string1[j-1])
+        direction_stack.push(LEFT)
+        backtrack(i, j-1)
+
+        direction_stack.pop()
+        string1_substrings.popleft()
+
+    # traverse up
+    if i > 0 and dp_matrix[i-1][j]:
+        if direction_stack[-1] != UP:
+            alternate string in buffers
+
+        string2_substrings[0].appendleft(string2[i-1])
+        direction_stack.push(UP)
+        backtrack(i-1, j)
+
+        direction_stack.pop()
+        string2_substrings.popleft()
+
+# start the recursion tree at the bottom-right corner of the table, and
+# work backwards
+n = length(string1)
+m = length(string2)
+backtrack(n, m)
+
+return results
+
+END PSEUDOCODE
+-----------
+
+
+TIME COMPLEXITY ANALYSIS:
+-------------------------
+
+DYNAMIC PROGRAMMING PROBLEM COMPLEXITY: is_string_interleaved()
+
+Time: O(m * n)
+Auxillary/Space: O(m * n)
+where n and m are the lengths of string1 and string2 respectively.
+The time complexity comes from having to compute an entry for all
+elements that comprise the DP table: m * n.  Each computation can be done
+in constant time.  The space complexity is also m * n, since you are required
+to maintain a table as an array with m rows and n columns to represent the
+interleaving combinations, and whether they lead to the interleaved string.
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+BACKTRACKING SUBSTRING SET SOLUTION COMPLEXITY: find_substring_sets()
+
+The backtracking function, which enumerates all the sets of substrings that
+can interleave to comprise string 3, represented in: find_substring_sets()
+is going to be:
+
+let M = max(n+1, m+1), to represent the depth of the recursion tree.
+Note, we add 1 here for the extra row and column in the matrix.
+We know that each node of the tree can either go left or up, making
+the choice a binary decision.  In the worst case, we will assume we visit
+every node, or nearly every node.
+
+the time complexity of a recursion tree is: O(b^d), where b is the branching
+factor, and d is the depth of the tree.  The max depth of the tree will be
+the maximum dimension of the DP table.  The decision factor is 2, since we can
+either traverse left or up in the table (assuming we start in the bottom-right
+corner, which is the case in my solution).  Therefore, it is a binary decision.
+Moreover, see the big O representations below:
+
+Time: O(2^M) or O(2^n)
+
+let N = number of uniqu solutions
+let L = length of string3, and m and n be lengths of strings 1 and 2
+then L = m * n
+
+Auxillary/Storage Complexity: O(N * L)
 """
+
 from __future__ import annotations
+
 
 from dataclasses import dataclass, field
 import enum
@@ -30,9 +171,9 @@ class InputFileSchema(enum.IntEnum):
 
 @dataclass
 class InputData:
-    string1: str
-    string2: str
-    string3: str
+    string1: str = ""
+    string2: str = ""
+    string3: str = ""
 
     @classmethod
     def from_input_file(cls, filename: Path) -> InputData:
@@ -83,8 +224,7 @@ class InterleaveResultsFile:
             s2_substrings_str: str = ', '.join(self.s2_substrings)
             output_str = f"""Interleaving exists: {self.results.interleave_exists}, Count of interleavings: {self.interleave_count}
 s1 substrings: {s1_substrings_str}
-s2 substrings: {s2_substrings_str}
-            """
+s2 substrings: {s2_substrings_str}"""
             output_file.write(output_str)
 
 def is_string_interleaved(string1: str, string2: str, string3: str) -> IntMatrix:
@@ -119,8 +259,10 @@ def is_string_interleaved(string1: str, string2: str, string3: str) -> IntMatrix
     # of the table and work our way back to entry (0, 0).
     for i in range(m_rows, -1, -1):
         for j in range(n_columns, -1, -1):
+            # check if a substring can be extracted from string2, and check previous entries for non-zero.
             if i < m_rows and string2[i] == string3[i + j] and interleave_matrix[i + 1][j]:
                 interleave_matrix[i][j] = True
+            # check if a substring can be extracted from string1, and check previous entries for non-zero.
             elif j < n_columns and string1[j] == string3[i + j] and interleave_matrix[i][j + 1]:
                 interleave_matrix[i][j] = True
     
@@ -148,7 +290,7 @@ class Direction(enum.IntEnum):
     UP = 0 # Traversing a row
     LEFT = 1 # Traversing a column 
 
-def find_substring_sets(matrix: List[int], string1: str, string2: str) -> List[InterleaveSet]:
+def find_substring_sets(dp_matrix: List[int], string1: str, string2: str) -> List[InterleaveSet]:
     """
     Does a recursive backtracking path, similar to DFS.
 
@@ -164,9 +306,21 @@ def find_substring_sets(matrix: List[int], string1: str, string2: str) -> List[I
     whether the path has to switch between strings 1 and 2. This is important for
     the backtracking algorithm when it backtracks and makes a different viable
     decision in the case where the decision matrix has multiple paths.
+
+    Parameters
+    ----------
+    dp_matrix : IntMatrix
+        matrix solution from dynamic programming function.
+
+    string1 : str
+        input to dynamic programming problem
+    string2 : str
+        input to dynamic programming problem
     """
 
     results = []
+
+    # solution exploration buffers
     string_parts_1: Deque[CharArray] = deque([])
     string_parts_2: Deque[CharArray] = deque([])
     
@@ -191,7 +345,7 @@ def find_substring_sets(matrix: List[int], string1: str, string2: str) -> List[I
         # to determine where to go next
         
         # search left through columns
-        if j > 0 and matrix[i][j - 1]:
+        if j > 0 and dp_matrix[i][j - 1]:
             # decide if we alternated or not
             # if we were going up, and are now going left, we alternated.
             # if None, we are starting with an empty list, and need to add an empty str
@@ -209,7 +363,7 @@ def find_substring_sets(matrix: List[int], string1: str, string2: str) -> List[I
                 string_parts_1.popleft()
 
         # search up through rows
-        if i > 0 and matrix[i - 1][j]:
+        if i > 0 and dp_matrix[i - 1][j]:
             # decide if we alternated or not
             # if we were going left, and are now going up, we alternated.
             # if None, we are starting with an empty list, and need to add an empty str
@@ -227,8 +381,8 @@ def find_substring_sets(matrix: List[int], string1: str, string2: str) -> List[I
                 string_parts_2.popleft()
         
     # top of recursion tree
-    n: int = len(matrix) - 1
-    m: int = len(matrix[0]) - 1
+    n: int = len(dp_matrix) - 1
+    m: int = len(dp_matrix[0]) - 1
     backtrack(n, m)
 
     return results
@@ -268,111 +422,6 @@ def print_dp_matrix(matrix: IntMatrix, string1: str, string2: str):
     print_matrix(full_matrix)
     print("\n")
 
-def test_is_string_interleaved():
-    """
-    TEST CASES:
-
-    CASE 1
-    ------
-    1 aab
-    2 axy
-    3.1 aaxaby --> True
-    3.2 abaaxy --> False
-
-    CASE 2
-    ------
-    1 aabcc
-    2 dbbca
-    3.1 aadbbcbcac --> True
-    3.2 aadbbbaccc --> False
-
-    CASE 3
-    ------
-    1. XXY
-    2. XXZ
-    3. XXZXXY --> True
-
-    CASE 4
-    ------
-    1. ABC
-    2. DEF
-    3. ADBECF --> True
-    """
-
-    # case 1.1
-    string1 = "aab"
-    string2 = "axy"
-    string3 = "aaxaby"
-    results_1_1: InterleaveResults = is_string_interleaved(string1, string2, string3)
-    print("Interleaved String: ", string3, "\n")
-    print_dp_matrix(results_1_1.matrix, string1, string2)
-    assert results_1_1.interleave_exists
-
-    # case 1.2 
-    string3 = "abaaxy"
-    results_1_2: InterleaveResults = is_string_interleaved(string1, string2, string3)
-    print("Interleaved String: ", string3, "\n")
-    print_dp_matrix(results_1_2.matrix, string1, string2)
-    assert not results_1_2.interleave_exists
-    
-    # NOTE: case 2 originates from the homework problem
-    # case 2.1
-    string1 = "aabcc"
-    string2 = "dbbca" 
-    string3 = "aadbbcbcac"
-    results_2_1: InterleaveResults = is_string_interleaved(string1, string2, string3)
-    print("Interleaved String: ", string3, "\n")
-    print_dp_matrix(results_2_1.matrix, string1, string2)
-    assert results_2_1.interleave_exists
-
-    # case 2.2
-    string3 = "aadbbbaccc"
-    results_2_2: InterleaveResults = is_string_interleaved(string1, string2, string3)
-    print("Interleaved String: ", string3, "\n")
-    print_dp_matrix(results_2_2.matrix, string1, string2)
-    assert not results_2_2.interleave_exists
-
-    # case 3
-    string1 = "XXY"
-    string2 = "XXZ"
-    string3 = "XXZXXY"
-    results_3: InterleaveResults = is_string_interleaved(string1, string2, string3)
-    print("Interleaved String: ", string3, "\n")
-    print_dp_matrix(results_3.matrix, string1, string2)
-    assert results_3.interleave_exists
-
-    # case 4
-    string1 = "ABC"
-    string2 = "DEF"
-    string3 = "ADBECF"
-    results_4: InterleaveResults = is_string_interleaved(string1, string2, string3)
-    print("Interleaved String: ", string3, "\n")
-    print_dp_matrix(results_4.matrix, string1, string2)
-    assert results_4.interleave_exists
-
-def test_back_tracker():
-    string1 = "aabcc"
-    string2 = "dbbca" 
-    string3 = "aadbbcbcac"
-    results_2_1: InterleaveResults = is_string_interleaved(string1, string2, string3)
-    print("Interleaved String: ", string3, "\n")
-    print_dp_matrix(results_2_1.matrix, string1, string2)
-    assert results_2_1.interleave_exists
-
-    string_subsets: List[InterleaveSet] = find_substring_sets(results_2_1.matrix, string1, string2)
-    i: int
-    subset: InterleaveSet
-    for i, subset in enumerate(string_subsets):
-        print(f"""-------------------------
-Subset {i}:
-String 1 Substrings: {subset.string1_parts}
-String 2 Substrings: {subset.string2_parts}
--------------------------
-        """)
-
-def test_all():
-    test_is_string_interleaved()
-    test_back_tracker()
 
 def main():
     script_dir = Path(__file__).parent.resolve()
